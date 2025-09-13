@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Row-based Document Editor</title>
+  <style>
+    :root{
+      --bg:#0f1724; --card:#0b1220; --accent:#6ee7b7; --muted:#9aa4b2; --glass: rgba(255,255,255,0.03);
+      --radius:12px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,'Helvetica Neue',Arial;color:#e6eef6;background:linear-gradient(180deg,#07121a 0%, #071a12 100%);}
+
+    .app{
+      min-height:100vh;display:flex;gap:20px;padding:28px;align-items:flex-start;justify-content:center;
+      transition: all 0.3s ease;
+    }
+
+    .panel{width:980px;max-width:96%;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:18px;border-radius:18px;box-shadow:0 8px 30px rgba(2,6,23,0.6);}
+
+    /* Preview mode styles */
+    .preview-mode .app {
+      gap: 16px;
+      padding: 16px;
+    }
+    
+    .preview-mode .panel {
+      width: 48%;
+      max-width: 48%;
+    }
+
+    .preview-panel {
+      width: 48%;
+      max-width: 48%;
+      background: white;
+      padding: 40px;
+      border-radius: 18px;
+      box-shadow: 0 8px 30px rgba(2,6,23,0.6);
+      color: black;
+      font-family: Arial, Helvetica, sans-serif;
+      display: none;
+      overflow-y: auto;
+      max-height: calc(100vh - 32px);
+      position: relative;
+    }
+
+    .preview-mode .preview-panel {
+      display: block;
+    }
+
+    .preview-watermark {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      color: #ccc;
+      font-size: 12px;
+      font-weight: 500;
+      opacity: 0.7;
+      pointer-events: none;
+    }
+
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+    header h1{font-size:18px;margin:0;color:var(--accent)}
+    header .controls{display:flex;gap:8px;align-items:center}
+    button{appearance:none;border:0;background:var(--glass);color:var(--accent);padding:8px 12px;border-radius:10px;cursor:pointer;font-weight:600;transition: all 0.2s ease;}
+    button:hover{transform:translateY(-2px)}
+    button.active{background:var(--accent);color:#0f1724;}
+
+    .rows{display:flex;flex-direction:column;gap:10px}
+    .row{display:grid;grid-template-columns:120px 1fr 36px;align-items:start;gap:12px;padding:12px;border-radius:12px;background:linear-gradient(90deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));border:1px solid rgba(255,255,255,0.03)}
+
+    .left{display:flex;flex-direction:column;gap:8px}
+    .type-select{width:100%;padding:8px;border-radius:8px;background:transparent;color:var(--accent);border:1px dashed rgba(255,255,255,0.03)}
+    .drag-handle{width:100%;text-align:center;font-size:12px;color:var(--muted)}
+
+    .content{min-height:60px;padding:8px;border-radius:8px;background:transparent;border:1px dashed rgba(255,255,255,0.02);outline:none}
+    .content[contenteditable="true"]{cursor:text}
+
+    .title{font-size:28px;font-weight:700}
+    .description{font-size:16px;line-height:1.4}
+    .teacher{font-size:18px;font-weight:700;line-height:1.8;color:var(--accent);text-decoration:underline;}
+    .student{font-size:16px;font-weight:700;line-height:1.6;color:var(--accent);text-decoration:underline;}
+    .small{font-size:14px}
+
+    .actions{display:flex;flex-direction:column;gap:8px;align-items:center}
+    .actions button{padding:6px;border-radius:8px}
+    .remove{background:transparent;color:#ff7a7a}
+
+    .image-preview{max-width:100%;max-height:220px;border-radius:8px;display:block}
+
+    .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+
+    /* hover/interaction */
+    .row:hover{border-color:rgba(110,231,183,0.12);box-shadow:0 6px 18px rgba(9,12,20,0.6)}
+
+    /* Preview content styles */
+    .preview-content {
+      line-height: 1.6;
+    }
+
+    .preview-content .preview-row {
+      margin-bottom: 16px;
+      padding: 0;
+      border: none;
+      background: none;
+      display: block;
+    }
+
+    .preview-content .preview-title {
+      font-size: 32px;
+      font-weight: bold;
+      margin: 24px 0 16px 0;
+      color: #000;
+    }
+
+    .preview-content .preview-description {
+      font-size: 16px;
+      line-height: 1.6;
+      margin: 12px 0;
+      color: #333;
+    }
+
+    .preview-content .preview-teacher {
+      font-size: 18px;
+      font-weight: bold;
+      line-height: 2;
+      margin: 14px 0;
+      color: #000;
+    }
+
+    .preview-content .preview-student {
+      font-size: 16px;
+      font-weight: bold;
+      line-height: 1.8;
+      margin: 12px 0;
+      color: #333;
+    }
+
+    .preview-content .preview-small {
+      font-size: 14px;
+      line-height: 1.5;
+      margin: 8px 0;
+      color: #666;
+    }
+
+    .preview-content .preview-image {
+      max-width: 100%;
+      height: auto;
+      margin: 16px 0;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    /* Preview name formatting */
+    .preview-content .teacher-name,
+    .preview-content .student-name {
+      text-decoration: underline;
+      font-weight: bold;
+    }
+
+    .preview-content .name-separator {
+      text-decoration: none !important;
+      font-weight: normal;
+      margin: 0 4px;
+    }
+
+    /* Preview labels */
+    .preview-label {
+      font-weight: bold;
+      margin-right: 8px;
+    }
+
+    /* PDF friendly print styles */
+    @media print{
+      body{background:white;color:black}
+      .panel{box-shadow:none;background:white}
+      .type-select,.actions{display:none}
+      .row{border:0;padding:0}
+    }
+
+    /* subtle cursor-follow background */
+    .cursor-bg{position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;mix-blend-mode:screen;opacity:0.08}
+    .cursor-dot{position:absolute;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle at 30% 30%, rgba(110,231,183,0.9), rgba(110,231,183,0.6), transparent 60%);} 
+
+    footer{margin-top:14px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.02);display:flex;justify-content:space-between;align-items:center}
+    .hint{color:var(--muted);font-size:13px}
+
+    /* Hide cursor bg in preview mode */
+    .preview-mode .cursor-bg {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="cursor-bg" id="cursorBg"><div class="cursor-dot" id="cursorDot"></div></div>
+  <div class="app" id="app">
+    <div class="panel" id="editorPanel">
+      <header>
+        <h1>Row-based Document Editor</h1>
+        <div class="controls">
+          <button id="addRow">+ Add row</button>
+          <button id="previewToggle">📄 Preview</button>
+          <button id="exportPdf">Export to PDF</button>
+          <button id="clearAll" title="Clear all rows">Clear</button>
+        </div>
+      </header>
+
+      <div class="toolbar">
+        <label class="hint">Tip: Use "Teacher" & "Student" for formatted names. Separate multiple names with commas and spaces.</label>
+      </div>
+
+      <main id="doc">
+        <div class="rows" id="rowsContainer">
+          <!-- rows generated here -->
+        </div>
+      </main>
+
+      <footer>
+        <div class="hint">Built with HTML/CSS/JS • Save as .html and open in browser</div>
+        <div style="color:var(--muted);font-size:13px">Auto layout — row-based formatting</div>
+      </footer>
+    </div>
+
+    <div class="preview-panel" id="previewPanel">
+      <div class="preview-watermark">PDF Preview</div>
+      <div class="preview-content" id="previewContent">
+        <!-- preview content generated here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- html2pdf CDN for exporting to PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.9.2/html2pdf.bundle.min.js"></script>
+  <script>
+    // Simple row templating and behavior
+    const rowsContainer = document.getElementById('rowsContainer');
+    const addRowBtn = document.getElementById('addRow');
+    const exportPdfBtn = document.getElementById('exportPdf');
+    const clearAllBtn = document.getElementById('clearAll');
+    const previewToggleBtn = document.getElementById('previewToggle');
+    const app = document.getElementById('app');
+    const previewContent = document.getElementById('previewContent');
+
+    let rowId = 0;
+    let isPreviewMode = false;
+
+    function formatNamesForPreview(text, type) {
+      if (type !== 'teacher' && type !== 'student') return text;
+      
+      // Split by comma and format each name for preview only
+      const names = text.split(',').map(name => name.trim()).filter(name => name.length > 0);
+      
+      return names.map((name, index) => {
+        const nameSpan = `<span class="${type}-name">${name}</span>`;
+        const separator = index < names.length - 1 ? '<span class="name-separator">, </span>' : '';
+        return nameSpan + separator;
+      }).join('');
+    }
+
+    function updatePreview() {
+      if (!isPreviewMode) return;
+      
+      previewContent.innerHTML = '';
+      
+      Array.from(rowsContainer.children).forEach(row => {
+        const typeSelect = row.querySelector('.type-select');
+        const content = row.querySelector('.content');
+        const type = typeSelect.value;
+        
+        const previewRow = document.createElement('div');
+        previewRow.className = 'preview-row';
+        
+        if (type === 'image') {
+          const img = content.querySelector('img');
+          if (img) {
+            const previewImg = document.createElement('img');
+            previewImg.className = 'preview-image';
+            previewImg.src = img.src;
+            previewImg.alt = img.alt || '';
+            previewRow.appendChild(previewImg);
+          }
+        } else {
+          const textContent = content.innerText.trim();
+          if (textContent) {
+            const previewText = document.createElement('div');
+            previewText.className = `preview-${type}`;
+            
+            if (type === 'teacher' || type === 'student') {
+              // Add label and formatted names for preview
+              const label = type === 'teacher' ? 'Teachers:' : 'Students:';
+              const labelSpan = `<span class="preview-label">${label}</span>`;
+              const formattedNames = formatNamesForPreview(textContent, type);
+              previewText.innerHTML = labelSpan + formattedNames;
+            } else {
+              previewText.textContent = textContent;
+            }
+            
+            previewRow.appendChild(previewText);
+          }
+        }
+        
+        if (previewRow.children.length > 0) {
+          previewContent.appendChild(previewRow);
+        }
+      });
+    }
+
+    function togglePreview() {
+      isPreviewMode = !isPreviewMode;
+      
+      if (isPreviewMode) {
+        app.classList.add('preview-mode');
+        previewToggleBtn.textContent = '✏️ Edit';
+        previewToggleBtn.classList.add('active');
+        updatePreview();
+      } else {
+        app.classList.remove('preview-mode');
+        previewToggleBtn.textContent = '📄 Preview';
+        previewToggleBtn.classList.remove('active');
+      }
+    }
+
+    function createRow(initialType = 'description', initialText = ''){
+      rowId++;
+      const id = 'row-' + rowId;
+
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.dataset.id = id;
+
+      row.innerHTML = `
+        <div class="left">
+          <select class="type-select" data-action="type">
+            <option value="title">Title</option>
+            <option value="description" selected>Description</option>
+            <option value="teacher">Teacher</option>
+            <option value="student">Student</option>
+            <option value="image">Image</option>
+            <option value="small">Small</option>
+          </select>
+          <div class="drag-handle">⋮⋮</div>
+        </div>
+
+        <div class="content" contenteditable="true" data-action="content"></div>
+
+        <div class="actions">
+          <button class="remove" data-action="remove" title="Remove row">✕</button>
+        </div>
+      `;
+
+      rowsContainer.appendChild(row);
+
+      const select = row.querySelector('.type-select');
+      const content = row.querySelector('.content');
+      const remove = row.querySelector('[data-action="remove"]');
+
+      select.value = initialType;
+      if(initialType === 'image') applyImageMode(row, content, null);
+      else{ applyTextMode(content, initialType); content.innerText = initialText; }
+
+      // Simple input handler for updating preview
+      content.addEventListener('input', () => {
+        updatePreview();
+      });
+
+      // events
+      select.addEventListener('change', (e)=>{
+        const val = e.target.value;
+        if(val === 'image'){
+          applyImageMode(row, content);
+        } else {
+          applyTextMode(content, val);
+        }
+        updatePreview();
+      });
+
+      remove.addEventListener('click', ()=>{ 
+        row.remove(); 
+        updatePreview();
+      });
+
+      // allow pressing Enter to create new row (shift+enter for newline)
+      content.addEventListener('keydown', (ev)=>{
+        if(ev.key === 'Enter' && !ev.shiftKey){
+          ev.preventDefault();
+          createRow('description','');
+          // focus the last content
+          const last = rowsContainer.lastElementChild.querySelector('[data-action="content"]');
+          last.focus();
+        }
+      });
+
+      updatePreview();
+      return row;
+    }
+
+    function applyTextMode(contentEl, type){
+      // replace image UI if present
+      const row = contentEl.closest('.row');
+      const existingFile = row.querySelector('input[type=file]');
+      if(existingFile) existingFile.remove();
+      const img = row.querySelector('img'); if(img) img.remove();
+
+      contentEl.setAttribute('contenteditable','true');
+      contentEl.className = 'content ' + type;
+      contentEl.style.display = '';
+      
+      // Keep it simple - just store the text content
+      const text = contentEl.innerText || '';
+      contentEl.innerText = text;
+    }
+
+    function applyImageMode(row, contentEl, file){
+      // convert content area to image upload area
+      contentEl.removeAttribute('contenteditable');
+      contentEl.className = 'content image';
+      contentEl.innerHTML = '<div style="font-size:13px;color:#9aa4b2">Choose an image file below</div>';
+
+      // file input (one per row)
+      let fileInput = row.querySelector('input[type=file]');
+      if(!fileInput){
+        fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/*';
+        fileInput.style.marginTop = '6px';
+        fileInput.addEventListener('change', (ev)=>{
+          const f = ev.target.files && ev.target.files[0];
+          if(!f) return;
+          const url = URL.createObjectURL(f);
+          showImage(row, url, f.name);
+        });
+        row.appendChild(fileInput);
+      }
+
+      if(file) showImage(row, file, '');
+    }
+
+    function showImage(row, srcOrBlob, alt){
+      // remove old images
+      const old = row.querySelector('img'); if(old) old.remove();
+      const contentEl = row.querySelector('.content');
+      const img = document.createElement('img');
+      img.className = 'image-preview';
+      img.alt = alt || '';
+
+      if(typeof srcOrBlob === 'string') img.src = srcOrBlob;
+      else {
+        // if blob
+        img.src = URL.createObjectURL(srcOrBlob);
+      }
+
+      contentEl.innerHTML = '';
+      contentEl.appendChild(img);
+      updatePreview();
+    }
+
+    // initial demo rows
+    createRow('title','My Document Title');
+    createRow('description','This is a short description. Click the left dropdown to change row types.');
+    createRow('teacher','Dr. John Smith, Prof. Sarah Johnson, Dr. Michael Brown');
+    createRow('student','Alice Johnson, Bob Williams, Carol Davis, David Miller');
+
+    addRowBtn.addEventListener('click', ()=> createRow('description',''));
+    clearAllBtn.addEventListener('click', ()=>{ 
+      if(confirm('Clear all rows?')) {
+        rowsContainer.innerHTML=''; 
+        createRow('title','New Document');
+        updatePreview();
+      }
+    });
+
+    previewToggleBtn.addEventListener('click', togglePreview);
+
+    // Export to PDF using html2pdf
+    exportPdfBtn.addEventListener('click', async ()=>{
+      // prepare cloned node to get clean print styles
+      const opt = {
+        margin:       12,
+        filename:     'document.pdf',
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS:true },
+        jsPDF:        { unit: 'pt', format: 'a4', orientation: 'portrait' }
+      };
+
+      // create a printable clone without UI elements
+      const clone = document.createElement('div');
+      clone.style.padding = '20px';
+      clone.style.background = 'white';
+      clone.style.color = 'black';
+      clone.style.maxWidth = '800px';
+      clone.style.fontFamily = 'Arial, Helvetica, sans-serif';
+
+      // copy each row content into the clone
+      Array.from(rowsContainer.children).forEach(r=>{
+        const typeSelect = r.querySelector('.type-select');
+        const content = r.querySelector('.content');
+        const type = typeSelect.value;
+        
+        if (type === 'image') {
+          const c = r.cloneNode(true);
+          // remove controls inside clone
+          const sel = c.querySelector('.type-select'); if(sel) sel.remove();
+          const remove = c.querySelector('[data-action="remove"]'); if(remove) remove.remove();
+          const input = c.querySelector('input[type=file]'); if(input) input.remove();
+          c.style.border='0'; c.style.padding='8px 0';
+          clone.appendChild(c);
+        } else {
+          const textContent = content.innerText.trim();
+          if (textContent) {
+            const div = document.createElement('div');
+            div.style.margin = '12px 0';
+            div.style.padding = '0';
+            
+            if (type === 'title') {
+              div.style.fontSize = '32px';
+              div.style.fontWeight = 'bold';
+              div.style.margin = '24px 0 16px 0';
+              div.textContent = textContent;
+            } else if (type === 'description') {
+              div.style.fontSize = '16px';
+              div.style.lineHeight = '1.6';
+              div.textContent = textContent;
+            } else if (type === 'teacher') {
+              div.style.fontSize = '18px';
+              div.style.fontWeight = 'bold';
+              div.style.lineHeight = '2';
+              div.innerHTML = '<strong>Teachers:</strong> ' + formatNamesForPreview(textContent, type);
+            } else if (type === 'student') {
+              div.style.fontSize = '16px';
+              div.style.fontWeight = 'bold';
+              div.style.lineHeight = '1.8';
+              div.innerHTML = '<strong>Students:</strong> ' + formatNamesForPreview(textContent, type);
+            } else if (type === 'small') {
+              div.style.fontSize = '14px';
+              div.style.color = '#666';
+              div.textContent = textContent;
+            }
+            
+            clone.appendChild(div);
+          }
+        }
+      });
+
+      document.body.appendChild(clone);
+      try{
+        await html2pdf().set(opt).from(clone).save();
+      }catch(e){
+        console.error(e);
+        alert('Export failed: ' + e.message);
+      }
+      clone.remove();
+    });
+
+    // nice cursor-follow background (subtle)
+    const cursorBg = document.getElementById('cursorBg');
+    const cursorDot = document.getElementById('cursorDot');
+    window.addEventListener('mousemove', (e)=>{
+      cursorDot.style.left = (e.clientX - 130) + 'px';
+      cursorDot.style.top = (e.clientY - 130) + 'px';
+    });
+
+    // allow drag-and-drop to create image rows quickly
+    document.addEventListener('dragover', (e)=>{ e.preventDefault(); });
+    document.addEventListener('drop', (e)=>{
+      e.preventDefault();
+      const file = e.dataTransfer.files && e.dataTransfer.files[0];
+      if(!file) return;
+      const row = createRow('image');
+      const url = URL.createObjectURL(file);
+      showImage(row, url, file.name);
+    });
+
+    // simple keyboard shortcuts
+    document.addEventListener('keydown', (e)=>{
+      if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's'){
+        e.preventDefault();
+        exportPdfBtn.click();
+      }
+      if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p'){
+        e.preventDefault();
+        togglePreview();
+      }
+    });
+
+    // Initial preview update
+    updatePreview();
+  </script>
+</body>
+</html>

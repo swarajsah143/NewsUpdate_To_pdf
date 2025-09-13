@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Row Document Editor</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: rgba(255, 255, 255, 0.08);
+      --accent: #58a6ff;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      overflow: hidden;
+    }
+    .app {
+      display: flex;
+      height: 100%;
+    }
+    .panel {
+      padding: 16px;
+      box-sizing: border-box;
+      height: 100%;
+      overflow-y: auto;
+      transition: all 0.3s ease;
+    }
+    #editorPanel {
+      flex: 1;
+      background: var(--panel);
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+    }
+    #previewPanel {
+      flex: 1;
+      background: white;
+      color: black;
+      display: none;
+      box-shadow: var(--shadow);
+    }
+    .header {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    button {
+      background: var(--accent);
+      border: none;
+      padding: 8px 12px;
+      border-radius: 6px;
+      color: white;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    button:hover { opacity: 0.8; }
+    .row {
+      display: grid;
+      grid-template-columns: 120px 1fr auto;
+      gap: 8px;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 10px;
+      margin-bottom: 10px;
+      border-radius: 8px;
+    }
+    select {
+      padding: 6px;
+      border-radius: 6px;
+      border: none;
+      background: #161b22;
+      color: var(--text);
+    }
+    .content[contenteditable="true"] {
+      padding: 8px;
+      background: rgba(255,255,255,0.07);
+      border-radius: 6px;
+      min-height: 20px;
+      outline: none;
+    }
+    .remove-btn {
+      background: #d73a49;
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    /* Preview styles */
+    .preview-title {
+      text-align: center;
+      font-size: 28px;
+      font-weight: bold;
+      margin-bottom: 20px;
+      text-transform: uppercase;
+    }
+    .preview-description {
+      margin-bottom: 16px;
+      line-height: 1.6;
+      font-size: 16px;
+    }
+    .preview-teacher,
+    .preview-student {
+      margin-bottom: 12px;
+      font-size: 16px;
+    }
+    .preview-teacher span,
+    .preview-student span {
+      text-decoration: underline;
+      margin-right: 10px;
+    }
+    .preview-small {
+      font-size: 13px;
+      margin-top: 12px;
+      color: #444;
+    }
+    .preview-image-group {
+      display: flex;
+      gap: 10px;
+      margin: 16px 0;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .preview-image-group img {
+      max-width: 150px;
+      height: auto;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      box-shadow: 2px 2px 6px rgba(0,0,0,0.2);
+    }
+    .editor-image-preview {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .editor-image-preview img {
+      max-width: 100px;
+      border: 1px solid #555;
+      border-radius: 4px;
+    }
+    /* Preview mode */
+    .preview-mode #editorPanel { flex: 0.5; }
+    .preview-mode #previewPanel { display: block; flex: 0.5; }
+    /* Print */
+    @media print {
+      #editorPanel, .header { display: none; }
+      #previewPanel { display: block !important; flex: 1 !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div id="editorPanel" class="panel">
+      <div class="header">
+        <button onclick="addRow()">+ Add Row</button>
+        <button onclick="togglePreview()" id="previewBtn">📄 Preview</button>
+        <button onclick="exportPDF()">Export to PDF</button>
+        <button onclick="clearAll()">Clear</button>
+      </div>
+      <div id="rowsContainer"></div>
+    </div>
+    <div id="previewPanel" class="panel">
+      <div id="previewContent"></div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.9.3/html2pdf.bundle.min.js"></script>
+  <script>
+    const rowsContainer = document.getElementById("rowsContainer");
+    const previewContent = document.getElementById("previewContent");
+    const previewBtn = document.getElementById("previewBtn");
+
+    function addRow(type="description", text="") {
+      const row = document.createElement("div");
+      row.className = "row";
+
+      const dropdown = document.createElement("select");
+      ["title","description","teacher","student","image","small"].forEach(opt=>{
+        const o=document.createElement("option");
+        o.value=opt; o.textContent=opt.charAt(0).toUpperCase()+opt.slice(1);
+        if(opt===type) o.selected=true;
+        dropdown.appendChild(o);
+      });
+
+      const content = document.createElement("div");
+      content.className = "content";
+      content.contentEditable = true;
+      content.textContent = text;
+
+      const remove = document.createElement("button");
+      remove.textContent = "✖";
+      remove.className = "remove-btn";
+      remove.onclick = () => row.remove();
+
+      row.appendChild(dropdown);
+      row.appendChild(content);
+      row.appendChild(remove);
+
+      rowsContainer.appendChild(row);
+      applyRowMode(row);
+      updatePreview();
+    }
+
+    function applyRowMode(row){
+      const dropdown=row.querySelector("select");
+      const content=row.querySelector(".content");
+      if(dropdown.value==="image"){
+        content.contentEditable=false;
+        content.innerHTML=`
+          <input type="file" multiple accept="image/*" onchange="showImages(this)" />
+          <div class="editor-image-preview"></div>
+        `;
+      }else{
+        content.contentEditable=true;
+      }
+      updatePreview();
+    }
+
+    function showImages(input){
+      const previewDiv=input.parentNode.querySelector(".editor-image-preview");
+      previewDiv.innerHTML="";
+      Array.from(input.files).forEach(file=>{
+        const reader=new FileReader();
+        reader.onload=e=>{
+          const img=document.createElement("img");
+          img.src=e.target.result;
+          previewDiv.appendChild(img);
+          updatePreview();
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function updatePreview(){
+      previewContent.innerHTML="";
+      [...rowsContainer.children].forEach(row=>{
+        const type=row.querySelector("select").value;
+        const content=row.querySelector(".content");
+
+        if(type==="title" && content.textContent.trim()){
+          const el=document.createElement("div");
+          el.className="preview-title";
+          el.textContent=content.textContent;
+          previewContent.appendChild(el);
+        }
+        if(type==="description" && content.textContent.trim()){
+          const el=document.createElement("div");
+          el.className="preview-description";
+          el.textContent=content.textContent;
+          previewContent.appendChild(el);
+        }
+        if(type==="teacher" && content.textContent.trim()){
+          const el=document.createElement("div");
+          el.className="preview-teacher";
+          el.innerHTML="Teachers: "+formatNames(content.textContent);
+          previewContent.appendChild(el);
+        }
+        if(type==="student" && content.textContent.trim()){
+          const el=document.createElement("div");
+          el.className="preview-student";
+          el.innerHTML="Students: "+formatNames(content.textContent);
+          previewContent.appendChild(el);
+        }
+        if(type==="small" && content.textContent.trim()){
+          const el=document.createElement("div");
+          el.className="preview-small";
+          el.textContent=content.textContent;
+          previewContent.appendChild(el);
+        }
+        if(type==="image"){
+          const previewDiv=content.querySelector(".editor-image-preview");
+          if(previewDiv && previewDiv.children.length){
+            const group=document.createElement("div");
+            group.className="preview-image-group";
+            [...previewDiv.children].forEach(img=>{
+              const clone=img.cloneNode();
+              group.appendChild(clone);
+            });
+            previewContent.appendChild(group);
+          }
+        }
+      });
+    }
+
+    function formatNames(text){
+      return text.split(",").map(n=>`<span>${n.trim()}</span>`).join(" ");
+    }
+
+    function togglePreview(){
+      document.body.classList.toggle("preview-mode");
+      updatePreview();
+      previewBtn.textContent=document.body.classList.contains("preview-mode")?"✏️ Edit":"📄 Preview";
+    }
+
+    function exportPDF(){
+      updatePreview();
+      const element=document.getElementById("previewContent");
+      const opt={
+        margin:10,
+        filename:"document.pdf",
+        image:{type:"jpeg",quality:0.98},
+        html2canvas:{scale:2},
+        jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}
+      };
+      html2pdf().from(element).set(opt).save();
+    }
+
+    function clearAll(){ rowsContainer.innerHTML=""; previewContent.innerHTML=""; }
+
+    // Initial demo rows
+    addRow("title","Project Document");
+    addRow("description","This is a demo description.");
+    addRow("teacher","Mr. Smith, Ms. Johnson");
+    addRow("student","John Doe, Jane Doe");
+    addRow("image","");
+  </script>
+</body>
+</html>
